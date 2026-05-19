@@ -235,6 +235,57 @@ tbody tr:hover td { background: var(--surface2); }
   transition: color .15s;
 }
 .meas-del:hover { color: var(--red); }
+.export-row {
+  display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
+}
+.export-btn { flex: 1; min-width: 140px; }
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: 16px;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 100%; max-width: 680px;
+  max-height: 90vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: 14px;
+}
+.modal-close {
+  background: none; border: none; color: var(--dim);
+  font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 6px;
+  border-radius: 4px;
+}
+.modal-close:hover { color: var(--text); background: var(--border); }
+.modal-body { padding: 14px 16px; overflow-y: auto; }
+.script-box {
+  width: 100%; height: 340px;
+  background: #0a0d14;
+  border: 1px solid var(--border); border-radius: 6px;
+  color: #a8d8a0; font-family: 'Courier New', monospace; font-size: 12px;
+  padding: 12px; resize: vertical; outline: none; line-height: 1.6;
+}
+.copy-btn {
+  position: absolute; top: 8px; right: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text); font-size: 12px; padding: 4px 10px;
+  border-radius: 4px; cursor: pointer;
+}
+.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+.copy-btn.copied { border-color: var(--green); color: var(--green); }
+code {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 5px; font-size: 11px; font-family: monospace;
+}
 </style>
 </head>
 <body>
@@ -325,6 +376,29 @@ tbody tr:hover td { background: var(--surface2); }
         </table>
       </div>
       <div id="eq-summary" style="display:none" class="note"></div>
+      <div class="export-row" id="export-row" style="display:none">
+        <button class="btn export-btn" onclick="exportCSV()">📥 Download CSV</button>
+        <button class="btn export-btn" onclick="showQSYSExport()">🎛️ Q-SYS Lua Script</button>
+      </div>
+    </div>
+
+    <!-- Q-SYS export modal -->
+    <div id="qsys-modal" class="modal-backdrop" style="display:none" onclick="closeQSYSModal(event)">
+      <div class="modal">
+        <div class="modal-header">
+          <span>Q-SYS Lua Script</span>
+          <button class="modal-close" onclick="document.getElementById('qsys-modal').style.display='none'">×</button>
+        </div>
+        <div class="modal-body">
+          <p class="hint" style="margin-bottom:10px">
+            In Q-SYS Designer: add a <b>Script</b> component → paste this script → change <code>peqName</code> to match your Parametric EQ component's name in the design.
+          </p>
+          <div style="position:relative">
+            <textarea id="qsys-script" class="script-box" readonly></textarea>
+            <button class="copy-btn" id="copy-btn" onclick="copyScript()">Copy</button>
+          </div>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -852,6 +926,125 @@ function renderEQTable(bands) {
     After applying, re-measure to verify the correction. Positive gain = boost, negative = cut.
     Start with cuts before boosts where possible.
   `;
+  document.getElementById('export-row').style.display = 'flex';
+}
+
+// ─── Export: CSV ─────────────────────────────────────────────────────────────
+function exportCSV() {
+  const avg = computeAverage(measurements);
+  const bands = avg.eqBands;
+  const date = new Date().toISOString().slice(0,10);
+  const positions = measurements.length;
+
+  const header = ['Band','Filter Type','Frequency (Hz)','Gain (dB)','Q','Bandwidth','Priority'];
+  const rows = bands.map((b, i) => [
+    i + 1,
+    b.type,
+    b.freq,
+    b.gain.toFixed(1),
+    b.Q,
+    b.bw,
+    b.priority
+  ]);
+
+  const csv = [
+    `# Room EQ Analyzer — Export`,
+    `# Date: ${date}  |  Positions averaged: ${positions}`,
+    `#`,
+    header.join(','),
+    ...rows.map(r => r.join(','))
+  ].join('\r\n');
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `room-eq-${date}.csv`;
+  a.click();
+}
+
+// ─── Export: Q-SYS Lua script ─────────────────────────────────────────────────
+function buildQSYSScript() {
+  const avg = computeAverage(measurements);
+  const bands = avg.eqBands;
+  const date = new Date().toISOString().slice(0,10);
+  const positions = measurements.length;
+
+  // Q-SYS filter type strings for Parametric EQ component
+  const qsysType = t => t === 'Low Shelf' ? 'Low Shelf' : t === 'High Shelf' ? 'High Shelf' : 'Peaking';
+
+  const bandLines = bands.map((b, i) => {
+    const n = i + 1;
+    const typeStr = qsysType(b.type);
+    const gainStr = b.gain.toFixed(1);
+    const freqStr = b.freq.toFixed(1);
+    const qStr = b.Q.toFixed(2);
+    return [
+      `-- Band ${n}: ${b.freq >= 1000 ? (b.freq/1000).toFixed(1)+'kHz' : b.freq+'Hz'} | ${gainStr > 0 ? '+' : ''}${gainStr} dB | Q ${qStr} | ${b.priority} priority`,
+      `Component.Set(peqName, "filter.${n}.type",     { Value = "${typeStr}" })`,
+      `Component.Set(peqName, "filter.${n}.freq",     { Value = ${freqStr} })`,
+      `Component.Set(peqName, "filter.${n}.gain",     { Value = ${gainStr} })`,
+      `Component.Set(peqName, "filter.${n}.bw",       { Value = ${qStr} })`,
+      `Component.Set(peqName, "filter.${n}.bypass",   { Value = false })`,
+      ''
+    ].join('\n');
+  });
+
+  return `-- ================================================
+-- Room EQ Correction — Q-SYS Lua Script
+-- Generated: ${date}
+-- Positions measured: ${positions}
+-- ================================================
+--
+-- HOW TO USE:
+--   1. In Q-SYS Designer, add a "Script" component
+--      to your schematic.
+--   2. Change peqName below to match the exact name
+--      of your Parametric EQ component in the design.
+--   3. Paste this entire script into the Script editor.
+--   4. Save & push the design — the script runs on
+--      core start-up and applies all bands.
+--
+-- NOTE: Control names follow Q-SYS Parametric EQ
+-- component defaults. If yours differ, adjust the
+-- "filter.N.xxx" strings to match your component.
+-- ================================================
+
+local peqName = "PEQ"  -- ← change to your component name
+
+-- Unmute / enable the EQ component
+Component.Set(peqName, "bypass", { Value = false })
+
+${bandLines.join('')}
+-- Disable any unused bands above band ${bands.length}
+${Array.from({length: Math.max(0, 10 - bands.length)}, (_, j) => {
+  const n = bands.length + j + 1;
+  return `Component.Set(peqName, "filter.${n}.bypass", { Value = true })`;
+}).join('\n')}
+
+print("Room EQ correction applied — ${bands.length} band${bands.length !== 1 ? 's' : ''} set.")
+`;
+}
+
+function showQSYSExport() {
+  document.getElementById('qsys-script').value = buildQSYSScript();
+  document.getElementById('qsys-modal').style.display = 'flex';
+  document.getElementById('copy-btn').textContent = 'Copy';
+  document.getElementById('copy-btn').className = 'copy-btn';
+}
+
+function closeQSYSModal(e) {
+  if (e.target === document.getElementById('qsys-modal'))
+    document.getElementById('qsys-modal').style.display = 'none';
+}
+
+function copyScript() {
+  const ta = document.getElementById('qsys-script');
+  navigator.clipboard.writeText(ta.value).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied ✓';
+    btn.className = 'copy-btn copied';
+    setTimeout(() => { btn.textContent = 'Copy'; btn.className = 'copy-btn'; }, 2000);
+  });
 }
 
 // ─── Empty canvas ─────────────────────────────────────────────────────────────
