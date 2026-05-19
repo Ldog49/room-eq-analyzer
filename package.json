@@ -1,0 +1,14 @@
+{
+  "name": "room-eq-analyzer",
+  "version": "1.0.0",
+  "description": "Web-based room acoustic EQ analyzer using pink noise and mobile microphone",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "qrcode": "^1.5.3",
+    "socket.io": "^4.7.2"
+  }
+}

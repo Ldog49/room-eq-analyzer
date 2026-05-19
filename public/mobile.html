@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Room EQ — Record</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --dim: #8b949e;
+  --accent: #58a6ff;
+  --green: #3fb950;
+  --red: #f85149;
+  --amber: #e3b341;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 20px 40px;
+  gap: 20px;
+}
+h1 {
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.connection-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dim);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+}
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex-shrink: 0;
+}
+.dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot.err { background: var(--red); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  max-width: 380px;
+}
+.card p {
+  font-size: 14px;
+  color: var(--dim);
+  line-height: 1.6;
+}
+.card p + p { margin-top: 8px; }
+
+/* Record button */
+.rec-btn-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin: 8px 0;
+}
+#rec-btn {
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  border: 4px solid var(--green);
+  background: rgba(63,185,80,.12);
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+}
+#rec-btn .icon { font-size: 36px; line-height: 1; }
+#rec-btn.recording {
+  border-color: var(--red);
+  background: rgba(248,81,73,.18);
+  color: var(--red);
+  animation: pulse-ring 1.2s infinite;
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(248,81,73,.5); }
+  70% { box-shadow: 0 0 0 18px rgba(248,81,73,0); }
+  100% { box-shadow: 0 0 0 0 rgba(248,81,73,0); }
+}
+#rec-btn:disabled {
+  opacity: 0.4; cursor: not-allowed;
+}
+#rec-label {
+  font-size: 14px;
+  color: var(--dim);
+  text-align: center;
+  min-height: 20px;
+}
+#timer {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  letter-spacing: 2px;
+  min-height: 36px;
+  text-align: center;
+}
+.timer-bar-wrap {
+  width: 100%;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+#timer-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--red);
+  border-radius: 2px;
+  transition: width .5s linear;
+}
+
+/* Status messages */
+#status {
+  font-size: 13px;
+  text-align: center;
+  min-height: 20px;
+  color: var(--dim);
+}
+#status.ok { color: var(--green); }
+#status.err { color: var(--red); }
+#status.info { color: var(--accent); }
+
+/* Level meter */
+.meter-wrap {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.meter-label { font-size: 11px; color: var(--dim); text-align: center; }
+.meter-bar-wrap {
+  height: 12px;
+  background: var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+#level-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(to right, var(--green), var(--amber), var(--red));
+  border-radius: 6px;
+  transition: width 0.05s;
+}
+
+/* Instructions */
+.steps { list-style: none; counter-reset: s; }
+.steps li {
+  counter-increment: s;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--dim);
+  border-bottom: 1px solid var(--border);
+}
+.steps li:last-child { border-bottom: none; }
+.steps li::before {
+  content: counter(s);
+  min-width: 22px; height: 22px;
+  background: var(--border);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+  flex-shrink: 0; margin-top: 1px;
+}
+</style>
+</head>
+<body>
+
+<h1>🎙️ Room EQ — Record</h1>
+
+<div class="connection-row">
+  <div class="dot" id="conn-dot"></div>
+  <span id="conn-txt">Connecting…</span>
+</div>
+
+<div class="card">
+  <ol class="steps">
+    <li>Make sure pink noise is playing through the room speakers</li>
+    <li>Stand at your main listening position</li>
+    <li>Hold your phone at ear height, facing the speakers</li>
+    <li>Tap <b>Record</b> and stay still for 15 seconds</li>
+    <li>Tap <b>Stop</b> — analysis happens automatically</li>
+  </ol>
+</div>
+
+<div id="timer">00:00</div>
+<div class="timer-bar-wrap" style="width:100%;max-width:380px">
+  <div id="timer-bar"></div>
+</div>
+
+<div class="rec-btn-wrap">
+  <button id="rec-btn" onclick="toggleRecord()" disabled>
+    <span class="icon" id="btn-icon">⏺</span>
+    <span id="btn-lbl">Record</span>
+  </button>
+  <div id="rec-label">Waiting for desktop connection…</div>
+</div>
+
+<div class="meter-wrap">
+  <div class="meter-label">Microphone level</div>
+  <div class="meter-bar-wrap">
+    <div id="level-bar"></div>
+  </div>
+</div>
+
+<div id="status"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const sessionId = params.get('session');
+
+if (!sessionId) {
+  document.getElementById('conn-txt').textContent = 'Error: no session ID in URL';
+  document.getElementById('conn-dot').className = 'dot err';
+}
+
+const socket = io();
+let isConnected = false;
+
+socket.on('connect', () => {
+  if (sessionId) {
+    socket.emit('join', { session: sessionId, role: 'mobile' });
+    document.getElementById('conn-dot').className = 'dot on';
+    document.getElementById('conn-txt').textContent = 'Connected to desktop';
+    isConnected = true;
+    document.getElementById('rec-btn').disabled = false;
+    document.getElementById('rec-label').textContent = 'Ready to record';
+  }
+});
+
+socket.on('disconnect', () => {
+  document.getElementById('conn-dot').className = 'dot err';
+  document.getElementById('conn-txt').textContent = 'Disconnected — refresh to retry';
+  isConnected = false;
+  document.getElementById('rec-btn').disabled = true;
+});
+
+// ─── Recording ─────────────────────────────────────────────────────────────
+let mediaRecorder = null;
+let isRecording = false;
+let audioChunks = [];
+let timerInterval = null;
+let seconds = 0;
+let analyserNode = null, levelCtx = null;
+const MAX_SECONDS = 30;
+
+async function toggleRecord() {
+  if (!isConnected) return;
+  isRecording ? stopRecording() : await startRecording();
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        sampleRate: 48000
+      }
+    });
+
+    // Level meter via AnalyserNode
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const src = ac.createMediaStreamSource(stream);
+    analyserNode = ac.createAnalyser();
+    analyserNode.fftSize = 256;
+    src.connect(analyserNode);
+    startLevelMeter();
+
+    // Pick best supported format
+    const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4']
+      .find(m => MediaRecorder.isTypeSupported(m)) || '';
+
+    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = e => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      analyserNode = null;
+      document.getElementById('level-bar').style.width = '0%';
+
+      setStatus('Sending to desktop…', 'info');
+      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      const arrayBuffer = await blob.arrayBuffer();
+
+      socket.emit('recording:done');
+      socket.emit('audio:final', {
+        buffer: arrayBuffer,
+        mimeType: blob.type
+      });
+      setStatus('Sent! Check the desktop for results.', 'ok');
+    };
+
+    mediaRecorder.start(500); // 500 ms chunks
+    isRecording = true;
+    seconds = 0;
+
+    document.getElementById('rec-btn').className = 'recording';
+    document.getElementById('btn-icon').textContent = '⏹';
+    document.getElementById('btn-lbl').textContent = 'Stop';
+    document.getElementById('rec-label').textContent = 'Recording… keep still';
+
+    socket.emit('recording:start');
+
+    // Timer
+    timerInterval = setInterval(() => {
+      seconds++;
+      updateTimer(seconds);
+      if (seconds >= MAX_SECONDS) stopRecording();
+    }, 1000);
+
+  } catch (err) {
+    setStatus('Microphone error: ' + err.message, 'err');
+  }
+}
+
+function stopRecording() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+  clearInterval(timerInterval);
+  mediaRecorder.stop();
+  isRecording = false;
+
+  document.getElementById('rec-btn').className = '';
+  document.getElementById('btn-icon').textContent = '⏺';
+  document.getElementById('btn-lbl').textContent = 'Record';
+  document.getElementById('rec-label').textContent = 'Processing…';
+  document.getElementById('rec-btn').disabled = true;
+  document.getElementById('timer-bar').style.width = '0%';
+}
+
+function updateTimer(s) {
+  const mm = String(Math.floor(s/60)).padStart(2,'0');
+  const ss = String(s % 60).padStart(2,'0');
+  document.getElementById('timer').textContent = mm + ':' + ss;
+  document.getElementById('timer-bar').style.width = Math.min(100, (s / MAX_SECONDS) * 100) + '%';
+}
+
+function startLevelMeter() {
+  const buf = new Uint8Array(analyserNode.frequencyBinCount);
+  const tick = () => {
+    if (!analyserNode) return;
+    analyserNode.getByteFrequencyData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i];
+    const avg = sum / buf.length;
+    document.getElementById('level-bar').style.width = Math.min(100, (avg / 128) * 100) + '%';
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls || '';
+}
+</script>
+</body>
+</html>

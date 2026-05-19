@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Room EQ Analyzer</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #1c2128;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --dim: #8b949e;
+  --accent: #58a6ff;
+  --green: #3fb950;
+  --amber: #e3b341;
+  --red: #f85149;
+  --purple: #bc8cff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+header h1 span { font-size: 20px; }
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--dim);
+}
+.badge.ok { border-color: var(--green); color: var(--green); background: rgba(63,185,80,.1); }
+.badge.warn { border-color: var(--amber); color: var(--amber); background: rgba(227,179,65,.1); }
+main {
+  display: grid;
+  grid-template-columns: 270px 1fr;
+  gap: 14px;
+  padding: 14px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.panel-left { display: flex; flex-direction: column; gap: 12px; }
+.panel-right { display: flex; flex-direction: column; gap: 12px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.card h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--dim);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.qr-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+#qr-img {
+  width: 190px;
+  height: 190px;
+  border-radius: 6px;
+  border: 3px solid white;
+  display: block;
+}
+.qr-url {
+  font-size: 10px;
+  color: var(--dim);
+  word-break: break-all;
+  text-align: center;
+  padding: 0 4px;
+}
+.phone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface2);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot.rec { background: var(--red); animation: blink 0.9s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+.steps { list-style: none; counter-reset: s; }
+.steps li {
+  counter-increment: s;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+  color: var(--dim);
+  border-bottom: 1px solid var(--border);
+}
+.steps li:last-child { border-bottom: none; }
+.steps li::before {
+  content: counter(s);
+  min-width: 20px; height: 20px;
+  background: var(--border);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+  flex-shrink: 0;
+}
+.steps li.done { color: var(--text); }
+.steps li.done::before { background: var(--green); color: #0d1117; }
+.steps li.active { color: var(--text); }
+.steps li.active::before { background: var(--accent); color: #0d1117; animation: blink 1.5s infinite; }
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+  margin-top: 8px;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #0d1117; }
+.btn.primary:hover { background: #79c0ff; }
+.btn.danger { background: rgba(248,81,73,.15); border-color: var(--red); color: var(--red); }
+.btn.danger:hover { background: var(--red); color: white; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+.hint { font-size: 12px; color: var(--dim); margin-top: 6px; line-height: 1.5; }
+.canvas-wrap { position: relative; }
+canvas#spectrum {
+  width: 100%;
+  display: block;
+  border-radius: 4px;
+}
+.legend {
+  display: flex; gap: 16px; margin-bottom: 8px;
+  font-size: 11px; color: var(--dim);
+  flex-wrap: wrap;
+}
+.leg { display: flex; align-items: center; gap: 5px; }
+.leg-line { width: 22px; height: 2px; border-radius: 1px; }
+.eq-table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th {
+  text-align: left;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+tbody td { padding: 9px 12px; border-bottom: 1px solid #1c2128; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface2); }
+.pos { color: var(--red); font-weight: 600; }
+.neg { color: var(--green); font-weight: 600; }
+.pri-h { color: var(--red); font-weight: 700; }
+.pri-m { color: var(--amber); font-weight: 600; }
+.pri-l { color: var(--dim); }
+.empty { text-align: center; padding: 40px; color: var(--dim); }
+.analyzing {
+  text-align: center; padding: 40px; color: var(--accent);
+  display: none;
+}
+.note {
+  font-size: 11px; color: var(--dim); margin-top: 10px;
+  padding: 8px 10px; background: var(--surface2);
+  border-radius: 4px; border-left: 3px solid var(--border);
+  line-height: 1.5;
+}
+.note b { color: var(--amber); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>🎛️</span> Room EQ Analyzer</h1>
+  <span class="badge" id="hdr-badge">Waiting for phone</span>
+</header>
+
+<main>
+  <div class="panel-left">
+
+    <div class="card">
+      <h2>Workflow</h2>
+      <ol class="steps" id="steps">
+        <li class="done" id="s1">App loaded</li>
+        <li class="active" id="s2">Scan QR code on your phone</li>
+        <li id="s3">Play pink noise through your speakers/DSP</li>
+        <li id="s4">Stand at listening position &amp; record on phone</li>
+        <li id="s5">View EQ correction results below</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>Phone Connection</h2>
+      <div class="qr-wrap">
+        <img id="qr-img" alt="Loading QR code…">
+        <p class="qr-url" id="qr-url">Generating…</p>
+      </div>
+      <div class="phone-row">
+        <div class="dot" id="phone-dot"></div>
+        <span id="phone-txt">Waiting for phone…</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Pink Noise</h2>
+      <p class="hint">Play through your main speakers at a moderate level (75–85 dB). Keep constant while recording.</p>
+      <button class="btn primary" id="noise-btn" onclick="toggleNoise()">▶ Play Pink Noise</button>
+      <div id="noise-status" class="hint" style="margin-top:8px"></div>
+    </div>
+
+  </div>
+
+  <div class="panel-right">
+
+    <div class="card">
+      <h2>Frequency Response</h2>
+      <div class="legend">
+        <div class="leg"><div class="leg-line" style="background:var(--amber)"></div> Measured room response</div>
+        <div class="leg"><div class="leg-line" style="background:var(--green); border-top: 2px dashed var(--green); height:0"></div> EQ correction needed</div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="spectrum" height="280"></canvas>
+      </div>
+      <p class="note"><b>Note:</b> Phone microphones are less accurate below ~200 Hz and above ~10 kHz. For critical work use a calibrated measurement mic. The EQ suggestions are most reliable in the mid-range.</p>
+    </div>
+
+    <div class="card">
+      <h2>Parametric EQ Correction</h2>
+      <div id="analyzing" class="analyzing">⏳ Analyzing recording…</div>
+      <div class="eq-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Filter</th>
+              <th>Frequency</th>
+              <th>Gain</th>
+              <th>Q</th>
+              <th>Bandwidth</th>
+              <th>Priority</th>
+            </tr>
+          </thead>
+          <tbody id="eq-body">
+            <tr><td colspan="7" class="empty">Run a measurement to see EQ suggestions</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="eq-summary" style="display:none" class="note"></div>
+    </div>
+
+  </div>
+</main>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ─── Session ────────────────────────────────────────────────────────────────
+const sessionId = crypto.randomUUID();
+const socket = io();
+
+socket.emit('join', { session: sessionId, role: 'desktop' });
+
+// ─── QR Code ─────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    const mobileUrl = `${location.origin}/mobile.html?session=${sessionId}`;
+    document.getElementById('qr-url').textContent = mobileUrl;
+
+    const r = await fetch(`/api/qrcode?url=${encodeURIComponent(mobileUrl)}`);
+    const { dataUrl } = await r.json();
+    document.getElementById('qr-img').src = dataUrl;
+  } catch (e) {
+    document.getElementById('qr-url').textContent = 'QR generation failed – see console';
+    console.error(e);
+  }
+})();
+
+// ─── Phone connection events ──────────────────────────────────────────────
+socket.on('phone:connected', () => {
+  document.getElementById('phone-dot').className = 'dot on';
+  document.getElementById('phone-txt').textContent = 'Phone connected ✓';
+  document.getElementById('hdr-badge').textContent = 'Phone connected';
+  document.getElementById('hdr-badge').className = 'badge ok';
+  setStep(3);
+});
+
+socket.on('phone:disconnected', () => {
+  document.getElementById('phone-dot').className = 'dot';
+  document.getElementById('phone-txt').textContent = 'Phone disconnected';
+  document.getElementById('hdr-badge').textContent = 'Phone disconnected';
+  document.getElementById('hdr-badge').className = 'badge warn';
+});
+
+socket.on('recording:start', () => {
+  document.getElementById('phone-dot').className = 'dot rec';
+  document.getElementById('phone-txt').textContent = 'Recording…';
+  setStep(4);
+});
+
+socket.on('recording:done', () => {
+  document.getElementById('phone-dot').className = 'dot on';
+  document.getElementById('phone-txt').textContent = 'Recording received ✓';
+  document.getElementById('analyzing').style.display = 'block';
+});
+
+// ─── Receive audio from phone ─────────────────────────────────────────────
+socket.on('audio:final', async ({ buffer, mimeType }) => {
+  document.getElementById('analyzing').style.display = 'block';
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    // buffer arrives as an ArrayBuffer
+    const ab = buffer instanceof ArrayBuffer ? buffer :
+               (buffer.buffer ? buffer.buffer : buffer);
+    const audioBuffer = await ac.decodeAudioData(ab);
+    const results = analyzeAudio(audioBuffer);
+    drawSpectrum(results);
+    renderEQTable(results.eqBands);
+    setStep(5);
+  } catch (err) {
+    alert('Could not decode audio: ' + err.message);
+    console.error(err);
+  } finally {
+    document.getElementById('analyzing').style.display = 'none';
+  }
+});
+
+// ─── Step helper ─────────────────────────────────────────────────────────────
+function setStep(n) {
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById('s' + i);
+    el.className = i < n ? 'done' : i === n ? 'active' : '';
+  }
+}
+
+// ─── Pink noise ───────────────────────────────────────────────────────────────
+let audioCtx = null, noiseNode = null, noiseOn = false;
+
+function generatePinkNoiseBuffer(ac, seconds) {
+  const sr = ac.sampleRate;
+  const buf = ac.createBuffer(1, sr * seconds, sr);
+  const d = buf.getChannelData(0);
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+  for (let i = 0; i < d.length; i++) {
+    const w = Math.random() * 2 - 1;
+    b0 = 0.99886*b0 + w*0.0555179;
+    b1 = 0.99332*b1 + w*0.0750759;
+    b2 = 0.96900*b2 + w*0.1538520;
+    b3 = 0.86650*b3 + w*0.3104856;
+    b4 = 0.55000*b4 + w*0.5329522;
+    b5 = -0.7616*b5 - w*0.0168980;
+    d[i] = (b0+b1+b2+b3+b4+b5+b6+w*0.5362) * 0.11;
+    b6 = w * 0.115926;
+  }
+  return buf;
+}
+
+function toggleNoise() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  if (noiseOn) {
+    noiseNode && noiseNode.stop();
+    noiseNode = null; noiseOn = false;
+    document.getElementById('noise-btn').textContent = '▶ Play Pink Noise';
+    document.getElementById('noise-btn').className = 'btn primary';
+    document.getElementById('noise-status').textContent = '';
+  } else {
+    const buf = generatePinkNoiseBuffer(audioCtx, 30);
+    noiseNode = audioCtx.createBufferSource();
+    noiseNode.buffer = buf;
+    noiseNode.loop = true;
+    noiseNode.connect(audioCtx.destination);
+    noiseNode.start();
+    noiseOn = true;
+    document.getElementById('noise-btn').textContent = '■ Stop Pink Noise';
+    document.getElementById('noise-btn').className = 'btn danger';
+    document.getElementById('noise-status').textContent = 'Playing — ensure speakers are active & at good volume';
+    setStep(3);
+  }
+}
+
+// ─── FFT (Cooley-Tukey, in-place) ─────────────────────────────────────────────
+function fft(re, im) {
+  const n = re.length;
+  // Bit-reversal
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  // Butterfly
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -(2 * Math.PI) / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cRe = 1, cIm = 0;
+      for (let j = 0; j < (len >> 1); j++) {
+        const a = i+j, b = i+j+(len>>1);
+        const uR = re[a], uI = im[a];
+        const vR = re[b]*cRe - im[b]*cIm;
+        const vI = re[b]*cIm + im[b]*cRe;
+        re[a] = uR+vR; im[a] = uI+vI;
+        re[b] = uR-vR; im[b] = uI-vI;
+        const tmp = cRe*wRe - cIm*wIm;
+        cIm = cRe*wIm + cIm*wRe; cRe = tmp;
+      }
+    }
+  }
+}
+
+// ─── Audio analysis ───────────────────────────────────────────────────────────
+function analyzeAudio(audioBuffer) {
+  const sr = audioBuffer.sampleRate;
+  // Mix to mono
+  let samples = audioBuffer.getChannelData(0);
+  if (audioBuffer.numberOfChannels > 1) {
+    const ch1 = audioBuffer.getChannelData(1);
+    const mono = new Float32Array(samples.length);
+    for (let i = 0; i < samples.length; i++) mono[i] = (samples[i] + ch1[i]) * 0.5;
+    samples = mono;
+  }
+
+  const N = 16384;   // FFT size (power of 2, ~2.7 Hz/bin at 44.1 kHz)
+  const hop = N >> 1;
+  const numFrames = Math.max(1, Math.floor((samples.length - N) / hop));
+  const halfN = N >> 1;
+  const avgMag = new Float64Array(halfN);
+
+  for (let f = 0; f < numFrames; f++) {
+    const start = f * hop;
+    const re = new Float64Array(N);
+    const im = new Float64Array(N);
+    // Hann window
+    for (let i = 0; i < N; i++) {
+      const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / N));
+      re[i] = (samples[start + i] || 0) * w;
+    }
+    fft(re, im);
+    for (let k = 0; k < halfN; k++) {
+      avgMag[k] += Math.sqrt(re[k]*re[k] + im[k]*im[k]);
+    }
+  }
+  for (let k = 0; k < halfN; k++) avgMag[k] /= numFrames;
+
+  // Frequency array
+  const freqs = new Float32Array(halfN);
+  for (let k = 0; k < halfN; k++) freqs[k] = k * sr / N;
+
+  // Correct for pink noise slope: divide by theoretical 1/√k spectrum
+  // H[k] = avgMag[k] * √k  ∝ room response
+  const roomResp = new Float64Array(halfN);
+  for (let k = 1; k < halfN; k++) {
+    roomResp[k] = avgMag[k] * Math.sqrt(k);
+  }
+
+  // 1/3-octave log-scale smoothing
+  const smoothed = smoothLog(roomResp, freqs, 3);
+
+  // Convert to dB
+  const smoothDB = new Float32Array(halfN);
+  for (let k = 1; k < halfN; k++) {
+    smoothDB[k] = smoothed[k] > 0 ? 20 * Math.log10(smoothed[k]) : -60;
+  }
+
+  // Normalize: subtract mean over 200 Hz – 10 kHz
+  let sum = 0, cnt = 0;
+  for (let k = 1; k < halfN; k++) {
+    const f = freqs[k];
+    if (f >= 200 && f <= 10000 && smoothDB[k] > -60) { sum += smoothDB[k]; cnt++; }
+  }
+  const mean = cnt ? sum / cnt : 0;
+  for (let k = 1; k < halfN; k++) smoothDB[k] -= mean;
+
+  // Find EQ bands
+  const eqBands = findEQBands(smoothDB, freqs, halfN);
+
+  return { smoothDB, freqs, eqBands, sr, N };
+}
+
+function smoothLog(mag, freqs, octaveFraction) {
+  const n = mag.length;
+  const out = new Float64Array(n);
+  const bwR = Math.pow(2, 0.5 / octaveFraction); // half-bandwidth ratio
+
+  for (let k = 1; k < n; k++) {
+    const f = freqs[k];
+    if (f <= 0) continue;
+    const fLo = f / bwR, fHi = f * bwR;
+    // Bin indices
+    const kLo = Math.max(1, Math.round(fLo * n / freqs[n-1]));
+    const kHi = Math.min(n-1, Math.round(fHi * n / freqs[n-1]));
+    let s = 0, c = 0;
+    for (let j = kLo; j <= kHi; j++) { s += mag[j]; c++; }
+    out[k] = c ? s / c : mag[k];
+  }
+  return out;
+}
+
+// ─── 1/3-octave ISO center frequencies ───────────────────────────────────────
+const ISO_CENTERS = [
+  20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500,
+  630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000,
+  10000, 12500, 16000, 20000
+];
+
+function findEQBands(smoothDB, freqs, halfN) {
+  const bwR = Math.pow(2, 1/6);
+
+  // Average dB at each ISO center
+  const bands = ISO_CENTERS.map(cf => {
+    const fLo = cf / bwR, fHi = cf * bwR;
+    let s = 0, c = 0;
+    for (let k = 1; k < halfN; k++) {
+      const f = freqs[k];
+      if (f >= fLo && f <= fHi && smoothDB[k] > -60) { s += smoothDB[k]; c++; }
+    }
+    return { freq: cf, roomDB: c ? s/c : 0 };
+  });
+
+  // Correction = invert room response
+  bands.forEach(b => b.corrDB = -b.roomDB);
+
+  // Only bands needing ≥ 2 dB correction
+  const significant = bands.filter(b => Math.abs(b.corrDB) >= 2);
+
+  // Estimate Q from width of adjacent significant bands
+  const result = significant.map((b, i) => {
+    // Count consecutive significant neighbors
+    let width = 1;
+    const thr = Math.abs(b.corrDB) * 0.5;
+    for (let j = significant.indexOf(b) - 1; j >= 0; j--) {
+      if (Math.abs(significant[j].corrDB) >= thr &&
+          Math.abs(Math.log2(significant[j].freq / b.freq)) < 2) width++;
+      else break;
+    }
+    for (let j = significant.indexOf(b) + 1; j < significant.length; j++) {
+      if (Math.abs(significant[j].corrDB) >= thr &&
+          Math.abs(Math.log2(significant[j].freq / b.freq)) < 2) width++;
+      else break;
+    }
+    const Q = width <= 1 ? 4.32 : width <= 2 ? 2.83 : width <= 3 ? 1.41 : 0.71;
+    const bwOct = width <= 1 ? '1/3 oct' : width <= 2 ? '2/3 oct' : width <= 3 ? '1 oct' : '2 oct';
+
+    // Filter type
+    let type = 'Peak';
+    if (b.freq <= 80) type = 'Low Shelf';
+    else if (b.freq >= 8000) type = 'High Shelf';
+
+    // Priority
+    const mag = Math.abs(b.corrDB);
+    const priority = mag >= 6 ? 'High' : mag >= 3 ? 'Medium' : 'Low';
+
+    return {
+      freq: b.freq,
+      gain: parseFloat(b.corrDB.toFixed(1)),
+      Q: parseFloat(Q.toFixed(2)),
+      bw: bwOct,
+      type,
+      priority,
+      mag
+    };
+  });
+
+  // Sort by magnitude descending, deduplicate, return top 12
+  return result
+    .sort((a, b) => b.mag - a.mag)
+    .slice(0, 12)
+    .sort((a, b) => a.freq - b.freq);
+}
+
+// ─── Canvas visualization ─────────────────────────────────────────────────────
+function drawSpectrum({ smoothDB, freqs, sr, N }) {
+  const canvas = document.getElementById('spectrum');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = 280;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const PAD = { t: 12, r: 16, b: 36, l: 46 };
+  const cW = W - PAD.l - PAD.r;
+  const cH = H - PAD.t - PAD.b;
+
+  const MIN_F = 20, MAX_F = 20000;
+  const MIN_DB = -24, MAX_DB = 24;
+
+  const fx = f => PAD.l + (Math.log10(f/MIN_F) / Math.log10(MAX_F/MIN_F)) * cW;
+  const dy = db => PAD.t + (1 - (db - MIN_DB) / (MAX_DB - MIN_DB)) * cH;
+
+  // Background
+  ctx.fillStyle = '#0a0d14';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid — dB lines
+  ctx.strokeStyle = '#1e2535'; ctx.lineWidth = 1;
+  [-18,-12,-6,0,6,12,18].forEach(db => {
+    const y = dy(db);
+    ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l+cW, y); ctx.stroke();
+    ctx.fillStyle = db === 0 ? '#58a6ff55' : '#8b949e';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText((db > 0 ? '+' : '') + db, PAD.l - 4, y + 4);
+  });
+
+  // 0 dB line
+  ctx.strokeStyle = '#58a6ff44'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(PAD.l, dy(0)); ctx.lineTo(PAD.l+cW, dy(0)); ctx.stroke();
+
+  // Grid — frequency lines
+  const FGRID = [20,50,100,200,500,1000,2000,5000,10000,20000];
+  FGRID.forEach(f => {
+    const x = fx(f);
+    ctx.strokeStyle = '#1e2535'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t+cH); ctx.stroke();
+    ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(f >= 1000 ? f/1000+'k' : f, x, PAD.t + cH + 16);
+  });
+
+  // Axis labels
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('Frequency (Hz)', PAD.l + cW/2, H - 2);
+  ctx.save(); ctx.translate(10, PAD.t + cH/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('Level (dB)', 0, 0); ctx.restore();
+
+  // Unreliable range indicator
+  [{ lo:20, hi:200 }, { lo:10000, hi:20000 }].forEach(({lo,hi}) => {
+    const x1 = fx(lo), x2 = fx(hi);
+    ctx.fillStyle = 'rgba(255,200,0,0.04)';
+    ctx.fillRect(x1, PAD.t, x2-x1, cH);
+  });
+
+  const halfN = N >> 1;
+
+  // Measured room response (amber)
+  ctx.strokeStyle = '#e3b341'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  let first = true;
+  for (let k = 1; k < halfN; k++) {
+    const f = freqs[k];
+    if (f < MIN_F || f > MAX_F) continue;
+    if (smoothDB[k] <= -60) continue;
+    const x = fx(f);
+    const y = dy(Math.max(MIN_DB, Math.min(MAX_DB, smoothDB[k])));
+    first ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    first = false;
+  }
+  ctx.stroke();
+
+  // EQ correction (green dashed) = -smoothDB
+  ctx.strokeStyle = '#3fb950'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath(); first = true;
+  for (let k = 1; k < halfN; k++) {
+    const f = freqs[k];
+    if (f < MIN_F || f > MAX_F) continue;
+    if (smoothDB[k] <= -60) continue;
+    const x = fx(f);
+    const corrDB = -smoothDB[k];
+    const y = dy(Math.max(MIN_DB, Math.min(MAX_DB, corrDB)));
+    first ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    first = false;
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ─── EQ Table ─────────────────────────────────────────────────────────────────
+function renderEQTable(bands) {
+  const tbody = document.getElementById('eq-body');
+  const summary = document.getElementById('eq-summary');
+
+  if (!bands.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No significant EQ correction needed (room is relatively flat!)</td></tr>';
+    summary.style.display = 'none';
+    return;
+  }
+
+  tbody.innerHTML = bands.map((b, i) => {
+    const gainStr = (b.gain > 0 ? '+' : '') + b.gain.toFixed(1) + ' dB';
+    const gainCls = b.gain > 0 ? 'pos' : 'neg';
+    const priCls = b.priority === 'High' ? 'pri-h' : b.priority === 'Medium' ? 'pri-m' : 'pri-l';
+    const fStr = b.freq >= 1000 ? (b.freq/1000).toFixed(b.freq % 1000 ? 1 : 0) + ' kHz' : b.freq + ' Hz';
+    return `<tr>
+      <td>${i+1}</td>
+      <td>${b.type}</td>
+      <td><b>${fStr}</b></td>
+      <td class="${gainCls}">${gainStr}</td>
+      <td>${b.Q}</td>
+      <td>${b.bw}</td>
+      <td class="${priCls}">${b.priority}</td>
+    </tr>`;
+  }).join('');
+
+  const highCount = bands.filter(b => b.priority === 'High').length;
+  summary.style.display = 'block';
+  summary.innerHTML = `
+    <b>How to apply:</b> Enter these settings into your DSP's parametric EQ section.
+    Adjust the <b>${highCount} High-priority</b> bands first — they have the biggest impact.
+    After applying, re-measure to verify the correction. Positive gain = boost, negative = cut.
+    Start with cuts before boosts where possible.
+  `;
+}
+
+// Draw empty canvas on load
+window.addEventListener('load', () => {
+  const canvas = document.getElementById('spectrum');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = 280;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  ctx.fillStyle = '#0a0d14';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw empty grid
+  const PAD = { t: 12, r: 16, b: 36, l: 46 };
+  const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
+  const MIN_F = 20, MAX_F = 20000, MIN_DB = -24, MAX_DB = 24;
+  const fx = f => PAD.l + (Math.log10(f/MIN_F) / Math.log10(MAX_F/MIN_F)) * cW;
+  const dy = db => PAD.t + (1 - (db - MIN_DB) / (MAX_DB - MIN_DB)) * cH;
+
+  [-18,-12,-6,0,6,12,18].forEach(db => {
+    const y = dy(db);
+    ctx.strokeStyle = '#1e2535'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l+cW, y); ctx.stroke();
+    ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'right';
+    ctx.fillText((db > 0 ? '+' : '') + db, PAD.l - 4, y + 4);
+  });
+
+  [20,50,100,200,500,1000,2000,5000,10000,20000].forEach(f => {
+    ctx.strokeStyle = '#1e2535'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(fx(f), PAD.t); ctx.lineTo(fx(f), PAD.t+cH); ctx.stroke();
+    ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(f >= 1000 ? f/1000+'k' : f, fx(f), PAD.t + cH + 16);
+  });
+
+  ctx.strokeStyle = '#58a6ff33'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD.l, dy(0)); ctx.lineTo(PAD.l+cW, dy(0)); ctx.stroke();
+
+  ctx.fillStyle = '#8b949e55'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('Measurement will appear here after recording', PAD.l + cW/2, PAD.t + cH/2);
+});
+</script>
+</body>
+</html>
