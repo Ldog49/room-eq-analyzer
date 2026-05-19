@@ -210,6 +210,31 @@ tbody tr:hover td { background: var(--surface2); }
   line-height: 1.5;
 }
 .note b { color: var(--amber); }
+.meas-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  background: var(--accent); color: #0d1117;
+  border-radius: 9px; font-size: 11px; font-weight: 700;
+  vertical-align: middle; margin-left: 4px;
+}
+.meas-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.meas-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px;
+}
+.meas-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.meas-name { flex: 1; color: var(--text); }
+.meas-del {
+  background: none; border: none; color: var(--dim);
+  cursor: pointer; font-size: 16px; line-height: 1;
+  padding: 0 2px; border-radius: 3px;
+  transition: color .15s;
+}
+.meas-del:hover { color: var(--red); }
 </style>
 </head>
 <body>
@@ -252,6 +277,15 @@ tbody tr:hover td { background: var(--surface2); }
       <div id="noise-status" class="hint" style="margin-top:8px"></div>
     </div>
 
+    <div class="card">
+      <h2>Measurements <span id="meas-count-badge" class="meas-badge">0</span></h2>
+      <p class="hint">Record from multiple positions — the graph and EQ update after each one.</p>
+      <div id="meas-list" class="meas-list">
+        <p class="hint" style="text-align:center;padding:8px 0">No measurements yet</p>
+      </div>
+      <button class="btn" id="clear-btn" onclick="clearMeasurements()" disabled style="margin-top:8px">Clear All</button>
+    </div>
+
   </div>
 
   <div class="panel-right">
@@ -259,7 +293,8 @@ tbody tr:hover td { background: var(--surface2); }
     <div class="card">
       <h2>Frequency Response</h2>
       <div class="legend">
-        <div class="leg"><div class="leg-line" style="background:var(--amber)"></div> Measured room response</div>
+        <div class="leg"><div class="leg-line" style="background:#555e6e"></div> Individual positions</div>
+        <div class="leg"><div class="leg-line" style="background:var(--amber)"></div> Averaged response</div>
         <div class="leg"><div class="leg-line" style="background:var(--green); border-top: 2px dashed var(--green); height:0"></div> EQ correction needed</div>
       </div>
       <div class="canvas-wrap">
@@ -269,7 +304,7 @@ tbody tr:hover td { background: var(--surface2); }
     </div>
 
     <div class="card">
-      <h2>Parametric EQ Correction</h2>
+      <h2>Parametric EQ Correction <span id="avg-label" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim);font-size:11px"></span></h2>
       <div id="analyzing" class="analyzing">⏳ Analyzing recording…</div>
       <div class="eq-table-wrap">
         <table>
@@ -346,18 +381,33 @@ socket.on('recording:done', () => {
   document.getElementById('analyzing').style.display = 'block';
 });
 
+// ─── Multi-measurement state ──────────────────────────────────────────────
+const MEAS_COLORS = ['#7b9fcc','#a07bcc','#7bcc9f','#cc9f7b','#cc7b9f','#9fcc7b','#7bbccc','#ccb07b'];
+let measurements = [];
+let sharedAudioCtx = null;
+
+function getAudioCtx() {
+  if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return sharedAudioCtx;
+}
+
 // ─── Receive audio from phone ─────────────────────────────────────────────
 socket.on('audio:final', async ({ buffer, mimeType }) => {
   document.getElementById('analyzing').style.display = 'block';
   try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    // buffer arrives as an ArrayBuffer
+    const ac = getAudioCtx();
     const ab = buffer instanceof ArrayBuffer ? buffer :
                (buffer.buffer ? buffer.buffer : buffer);
     const audioBuffer = await ac.decodeAudioData(ab);
-    const results = analyzeAudio(audioBuffer);
-    drawSpectrum(results);
-    renderEQTable(results.eqBands);
+    const result = analyzeAudio(audioBuffer);
+    result.label = `Position ${measurements.length + 1}`;
+    result.color = MEAS_COLORS[measurements.length % MEAS_COLORS.length];
+    measurements.push(result);
+
+    const avg = computeAverage(measurements);
+    drawSpectrum(measurements, avg);
+    renderEQTable(avg.eqBands);
+    renderMeasurementsList();
     setStep(5);
   } catch (err) {
     alert('Could not decode audio: ' + err.message);
@@ -366,6 +416,69 @@ socket.on('audio:final', async ({ buffer, mimeType }) => {
     document.getElementById('analyzing').style.display = 'none';
   }
 });
+
+// ─── Average across measurements ──────────────────────────────────────────
+function computeAverage(meas) {
+  const n = meas[0].smoothDB.length;
+  const avgDB = new Float32Array(n);
+  for (const m of meas) {
+    for (let k = 0; k < n; k++) avgDB[k] += m.smoothDB[k];
+  }
+  for (let k = 0; k < n; k++) avgDB[k] /= meas.length;
+  const eqBands = findEQBands(avgDB, meas[0].freqs, n);
+  return { smoothDB: avgDB, freqs: meas[0].freqs, eqBands, N: meas[0].N };
+}
+
+// ─── Measurements list UI ────────────────────────────────────────────────
+function renderMeasurementsList() {
+  const list = document.getElementById('meas-list');
+  const badge = document.getElementById('meas-count-badge');
+  const clearBtn = document.getElementById('clear-btn');
+  const avgLabel = document.getElementById('avg-label');
+
+  badge.textContent = measurements.length;
+  clearBtn.disabled = measurements.length === 0;
+  avgLabel.textContent = measurements.length > 1
+    ? `— averaged from ${measurements.length} positions`
+    : measurements.length === 1 ? '— 1 position' : '';
+
+  if (!measurements.length) {
+    list.innerHTML = '<p class="hint" style="text-align:center;padding:8px 0">No measurements yet</p>';
+    return;
+  }
+
+  list.innerHTML = measurements.map((m, i) => `
+    <div class="meas-item">
+      <div class="meas-dot" style="background:${m.color}"></div>
+      <span class="meas-name">${m.label}</span>
+      <button class="meas-del" onclick="deleteMeasurement(${i})" title="Remove">×</button>
+    </div>
+  `).join('');
+}
+
+function deleteMeasurement(i) {
+  measurements.splice(i, 1);
+  // Re-label remaining
+  measurements.forEach((m, idx) => { m.label = `Position ${idx + 1}`; m.color = MEAS_COLORS[idx % MEAS_COLORS.length]; });
+  renderMeasurementsList();
+  if (!measurements.length) {
+    drawEmptyCanvas();
+    document.getElementById('eq-body').innerHTML = '<tr><td colspan="7" class="empty">Run a measurement to see EQ suggestions</td></tr>';
+    document.getElementById('eq-summary').style.display = 'none';
+    return;
+  }
+  const avg = computeAverage(measurements);
+  drawSpectrum(measurements, avg);
+  renderEQTable(avg.eqBands);
+}
+
+function clearMeasurements() {
+  measurements = [];
+  renderMeasurementsList();
+  drawEmptyCanvas();
+  document.getElementById('eq-body').innerHTML = '<tr><td colspan="7" class="empty">Run a measurement to see EQ suggestions</td></tr>';
+  document.getElementById('eq-summary').style.display = 'none';
+}
 
 // ─── Step helper ─────────────────────────────────────────────────────────────
 function setStep(n) {
@@ -615,102 +728,93 @@ function findEQBands(smoothDB, freqs, halfN) {
     .sort((a, b) => a.freq - b.freq);
 }
 
-// ─── Canvas visualization ─────────────────────────────────────────────────────
-function drawSpectrum({ smoothDB, freqs, sr, N }) {
+// ─── Canvas helpers ───────────────────────────────────────────────────────────
+function setupCanvas() {
   const canvas = document.getElementById('spectrum');
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = 280;
   canvas.width = W * dpr; canvas.height = H * dpr;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
+  return { ctx, W, H };
+}
 
+function drawGrid(ctx, W, H) {
   const PAD = { t: 12, r: 16, b: 36, l: 46 };
-  const cW = W - PAD.l - PAD.r;
-  const cH = H - PAD.t - PAD.b;
-
-  const MIN_F = 20, MAX_F = 20000;
-  const MIN_DB = -24, MAX_DB = 24;
-
+  const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
+  const MIN_F = 20, MAX_F = 20000, MIN_DB = -24, MAX_DB = 24;
   const fx = f => PAD.l + (Math.log10(f/MIN_F) / Math.log10(MAX_F/MIN_F)) * cW;
   const dy = db => PAD.t + (1 - (db - MIN_DB) / (MAX_DB - MIN_DB)) * cH;
 
-  // Background
   ctx.fillStyle = '#0a0d14';
   ctx.fillRect(0, 0, W, H);
 
-  // Grid — dB lines
-  ctx.strokeStyle = '#1e2535'; ctx.lineWidth = 1;
   [-18,-12,-6,0,6,12,18].forEach(db => {
     const y = dy(db);
+    ctx.strokeStyle = '#1e2535'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l+cW, y); ctx.stroke();
-    ctx.fillStyle = db === 0 ? '#58a6ff55' : '#8b949e';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'right';
+    ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'right';
     ctx.fillText((db > 0 ? '+' : '') + db, PAD.l - 4, y + 4);
   });
 
-  // 0 dB line
   ctx.strokeStyle = '#58a6ff44'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(PAD.l, dy(0)); ctx.lineTo(PAD.l+cW, dy(0)); ctx.stroke();
 
-  // Grid — frequency lines
-  const FGRID = [20,50,100,200,500,1000,2000,5000,10000,20000];
-  FGRID.forEach(f => {
-    const x = fx(f);
+  [20,50,100,200,500,1000,2000,5000,10000,20000].forEach(f => {
     ctx.strokeStyle = '#1e2535'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t+cH); ctx.stroke();
-    ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(f >= 1000 ? f/1000+'k' : f, x, PAD.t + cH + 16);
+    ctx.beginPath(); ctx.moveTo(fx(f), PAD.t); ctx.lineTo(fx(f), PAD.t+cH); ctx.stroke();
+    ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(f >= 1000 ? f/1000+'k' : f, fx(f), PAD.t + cH + 16);
   });
 
-  // Axis labels
-  ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace';
-  ctx.textAlign = 'center';
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
   ctx.fillText('Frequency (Hz)', PAD.l + cW/2, H - 2);
   ctx.save(); ctx.translate(10, PAD.t + cH/2); ctx.rotate(-Math.PI/2);
   ctx.fillText('Level (dB)', 0, 0); ctx.restore();
 
-  // Unreliable range indicator
   [{ lo:20, hi:200 }, { lo:10000, hi:20000 }].forEach(({lo,hi}) => {
-    const x1 = fx(lo), x2 = fx(hi);
     ctx.fillStyle = 'rgba(255,200,0,0.04)';
-    ctx.fillRect(x1, PAD.t, x2-x1, cH);
+    ctx.fillRect(fx(lo), PAD.t, fx(hi)-fx(lo), cH);
   });
 
-  const halfN = N >> 1;
+  return { PAD, cW, cH, fx, dy };
+}
 
-  // Measured room response (amber)
-  ctx.strokeStyle = '#e3b341'; ctx.lineWidth = 2;
+function drawCurve(ctx, smoothDB, freqs, halfN, fx, dy, MIN_F, MAX_F, MIN_DB, MAX_DB, color, lineWidth, dash) {
+  ctx.strokeStyle = color; ctx.lineWidth = lineWidth;
+  if (dash) ctx.setLineDash(dash); else ctx.setLineDash([]);
   ctx.beginPath();
   let first = true;
   for (let k = 1; k < halfN; k++) {
     const f = freqs[k];
-    if (f < MIN_F || f > MAX_F) continue;
-    if (smoothDB[k] <= -60) continue;
-    const x = fx(f);
-    const y = dy(Math.max(MIN_DB, Math.min(MAX_DB, smoothDB[k])));
-    first ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    first = false;
-  }
-  ctx.stroke();
-
-  // EQ correction (green dashed) = -smoothDB
-  ctx.strokeStyle = '#3fb950'; ctx.lineWidth = 1.5;
-  ctx.setLineDash([4, 3]);
-  ctx.beginPath(); first = true;
-  for (let k = 1; k < halfN; k++) {
-    const f = freqs[k];
-    if (f < MIN_F || f > MAX_F) continue;
-    if (smoothDB[k] <= -60) continue;
-    const x = fx(f);
-    const corrDB = -smoothDB[k];
-    const y = dy(Math.max(MIN_DB, Math.min(MAX_DB, corrDB)));
+    if (f < MIN_F || f > MAX_F || smoothDB[k] <= -60) continue;
+    const x = fx(f), y = dy(Math.max(MIN_DB, Math.min(MAX_DB, smoothDB[k])));
     first ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     first = false;
   }
   ctx.stroke();
   ctx.setLineDash([]);
+}
+
+// ─── Canvas visualization ─────────────────────────────────────────────────────
+function drawSpectrum(meas, avg) {
+  const { ctx, W, H } = setupCanvas();
+  const { PAD, fx, dy } = drawGrid(ctx, W, H);
+  const MIN_F = 20, MAX_F = 20000, MIN_DB = -24, MAX_DB = 24;
+  const halfN = avg.N >> 1;
+
+  // Individual measurements — thin, dimmed
+  for (const m of meas) {
+    drawCurve(ctx, m.smoothDB, m.freqs, halfN, fx, dy, MIN_F, MAX_F, MIN_DB, MAX_DB, m.color + '88', 1, null);
+  }
+
+  // Averaged response — thick amber
+  drawCurve(ctx, avg.smoothDB, avg.freqs, halfN, fx, dy, MIN_F, MAX_F, MIN_DB, MAX_DB, '#e3b341', 2.5, null);
+
+  // EQ correction — green dashed
+  const corrDB = new Float32Array(avg.smoothDB.length);
+  for (let k = 0; k < corrDB.length; k++) corrDB[k] = -avg.smoothDB[k];
+  drawCurve(ctx, corrDB, avg.freqs, halfN, fx, dy, MIN_F, MAX_F, MIN_DB, MAX_DB, '#3fb950', 1.5, [4,3]);
 }
 
 // ─── EQ Table ─────────────────────────────────────────────────────────────────
@@ -750,46 +854,15 @@ function renderEQTable(bands) {
   `;
 }
 
-// Draw empty canvas on load
-window.addEventListener('load', () => {
-  const canvas = document.getElementById('spectrum');
-  const dpr = window.devicePixelRatio || 1;
-  const W = canvas.clientWidth, H = 280;
-  canvas.width = W * dpr; canvas.height = H * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-
-  ctx.fillStyle = '#0a0d14';
-  ctx.fillRect(0, 0, W, H);
-
-  // Draw empty grid
-  const PAD = { t: 12, r: 16, b: 36, l: 46 };
-  const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
-  const MIN_F = 20, MAX_F = 20000, MIN_DB = -24, MAX_DB = 24;
-  const fx = f => PAD.l + (Math.log10(f/MIN_F) / Math.log10(MAX_F/MIN_F)) * cW;
-  const dy = db => PAD.t + (1 - (db - MIN_DB) / (MAX_DB - MIN_DB)) * cH;
-
-  [-18,-12,-6,0,6,12,18].forEach(db => {
-    const y = dy(db);
-    ctx.strokeStyle = '#1e2535'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l+cW, y); ctx.stroke();
-    ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'right';
-    ctx.fillText((db > 0 ? '+' : '') + db, PAD.l - 4, y + 4);
-  });
-
-  [20,50,100,200,500,1000,2000,5000,10000,20000].forEach(f => {
-    ctx.strokeStyle = '#1e2535'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(fx(f), PAD.t); ctx.lineTo(fx(f), PAD.t+cH); ctx.stroke();
-    ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(f >= 1000 ? f/1000+'k' : f, fx(f), PAD.t + cH + 16);
-  });
-
-  ctx.strokeStyle = '#58a6ff33'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(PAD.l, dy(0)); ctx.lineTo(PAD.l+cW, dy(0)); ctx.stroke();
-
+// ─── Empty canvas ─────────────────────────────────────────────────────────────
+function drawEmptyCanvas() {
+  const { ctx, W, H } = setupCanvas();
+  const { PAD, cW, cH, dy } = drawGrid(ctx, W, H);
   ctx.fillStyle = '#8b949e55'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('Measurement will appear here after recording', PAD.l + cW/2, PAD.t + cH/2);
-});
+  ctx.fillText('Measurements will appear here after recording', PAD.l + cW/2, PAD.t + cH/2);
+}
+
+window.addEventListener('load', drawEmptyCanvas);
 </script>
 </body>
 </html>
