@@ -5,336 +5,458 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Room EQ Analyzer</title>
 <style>
-:root {
-  --bg: #0d1117;
-  --surface: #161b22;
-  --surface2: #1c2128;
-  --border: #30363d;
-  --text: #c9d1d9;
-  --dim: #8b949e;
-  --accent: #58a6ff;
-  --green: #3fb950;
-  --amber: #e3b341;
-  --red: #f85149;
-  --purple: #bc8cff;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+:root {
+  /* OKLCH tinted neutrals — very dark blue-slate */
+  --bg:       oklch(9%   0.012 252);
+  --surface:  oklch(12.5% 0.012 252);
+  --surface2: oklch(15%  0.012 252);
+  --surface3: oklch(18%  0.012 252);
+  --border:   oklch(21%  0.012 252);
+  --border-hi:oklch(28%  0.012 252);
+  --text:     oklch(83%  0.006 252);
+  --text-dim: oklch(52%  0.006 252);
+  --text-xdim:oklch(36%  0.006 252);
+
+  /* Semantic */
+  --accent:     oklch(63% 0.165 244);
+  --accent-hi:  oklch(70% 0.165 244);
+  --accent-lo:  oklch(63% 0.165 244 / 0.12);
+  --success:    oklch(65% 0.155 145);
+  --success-lo: oklch(65% 0.155 145 / 0.10);
+  --warning:    oklch(74% 0.135 65);
+  --warning-lo: oklch(74% 0.135 65  / 0.10);
+  --danger:     oklch(62% 0.185 22);
+  --danger-lo:  oklch(62% 0.185 22  / 0.12);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur: 160ms;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
   font-size: 14px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* ── Header ─────────────────────────────────────────── */
 header {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  padding: 12px 20px;
+  padding: 0 20px;
+  height: 48px;
   display: flex;
   align-items: center;
   gap: 12px;
 }
-header h1 {
-  font-size: 16px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.logo {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--text);
 }
-header h1 span { font-size: 20px; }
-.badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
+.logo-icon {
+  display: flex; align-items: flex-end; gap: 2px; height: 16px;
+  opacity: 0.9;
+}
+.logo-icon span {
+  display: block; width: 3px; border-radius: 1.5px;
+  background: var(--accent);
+}
+.logo-icon span:nth-child(1) { height: 7px; }
+.logo-icon span:nth-child(2) { height: 13px; }
+.logo-icon span:nth-child(3) { height: 10px; }
+.logo-icon span:nth-child(4) { height: 16px; }
+.logo-icon span:nth-child(5) { height: 11px; }
+.logo-divider {
+  width: 1px; height: 16px; background: var(--border-hi); flex-shrink: 0;
+}
+.status-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 20px;
   border: 1px solid var(--border);
-  color: var(--dim);
+  color: var(--text-dim);
+  transition: border-color var(--dur), color var(--dur), background var(--dur);
 }
-.badge.ok { border-color: var(--green); color: var(--green); background: rgba(63,185,80,.1); }
-.badge.warn { border-color: var(--amber); color: var(--amber); background: rgba(227,179,65,.1); }
+.status-pill.ok {
+  border-color: var(--success); color: var(--success);
+  background: var(--success-lo);
+}
+.status-pill.warn {
+  border-color: var(--warning); color: var(--warning);
+  background: var(--warning-lo);
+}
+
+/* ── Layout ─────────────────────────────────────────── */
 main {
   display: grid;
-  grid-template-columns: 270px 1fr;
+  grid-template-columns: 278px 1fr;
   gap: 14px;
   padding: 14px;
-  max-width: 1400px;
+  max-width: 1440px;
   margin: 0 auto;
 }
-.panel-left { display: flex; flex-direction: column; gap: 12px; }
-.panel-right { display: flex; flex-direction: column; gap: 12px; }
+.panel-left  { display: flex; flex-direction: column; gap: 10px; }
+.panel-right { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── Cards ──────────────────────────────────────────── */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 14px;
+  padding: 14px 16px;
 }
-.card h2 {
-  font-size: 11px;
+.card-title {
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--dim);
+  letter-spacing: 0.9px;
+  color: var(--text-xdim);
   margin-bottom: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
 }
-.qr-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-#qr-img {
-  width: 190px;
-  height: 190px;
-  border-radius: 6px;
-  border: 3px solid white;
-  display: block;
-}
-.qr-url {
-  font-size: 10px;
-  color: var(--dim);
-  word-break: break-all;
-  text-align: center;
-  padding: 0 4px;
-}
-.phone-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: var(--surface2);
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  margin-top: 8px;
-  font-size: 13px;
-  color: var(--dim);
-}
-.dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--dim);
-  flex-shrink: 0;
-  transition: background 0.3s;
-}
-.dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
-.dot.rec { background: var(--red); animation: blink 0.9s infinite; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+/* ── Steps ──────────────────────────────────────────── */
 .steps { list-style: none; counter-reset: s; }
 .steps li {
   counter-increment: s;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  display: flex; align-items: flex-start; gap: 10px;
   padding: 7px 0;
-  font-size: 13px;
-  color: var(--dim);
+  font-size: 12.5px;
+  color: var(--text-dim);
   border-bottom: 1px solid var(--border);
+  transition: color var(--dur);
 }
 .steps li:last-child { border-bottom: none; }
 .steps li::before {
   content: counter(s);
-  min-width: 20px; height: 20px;
+  min-width: 18px; height: 18px;
   background: var(--border);
+  color: var(--text-xdim);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 600;
-  flex-shrink: 0;
+  font-size: 10px; font-weight: 700;
+  flex-shrink: 0; margin-top: 1px;
+  transition: background var(--dur), color var(--dur);
 }
+.steps li.done::before { background: var(--success); color: var(--bg); }
 .steps li.done { color: var(--text); }
-.steps li.done::before { background: var(--green); color: #0d1117; }
 .steps li.active { color: var(--text); }
-.steps li.active::before { background: var(--accent); color: #0d1117; animation: blink 1.5s infinite; }
+.steps li.active::before {
+  background: var(--accent); color: var(--bg);
+  animation: stepPulse 1.8s ease-in-out infinite;
+}
+@keyframes stepPulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
+
+/* ── QR / Phone ─────────────────────────────────────── */
+.qr-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+#qr-img {
+  width: 188px; height: 188px;
+  border-radius: 6px;
+  border: 3px solid oklch(95% 0 0);
+  display: block;
+}
+.qr-url {
+  font-size: 10px; color: var(--text-xdim);
+  word-break: break-all; text-align: center;
+  font-family: 'Courier New', monospace;
+  line-height: 1.4;
+}
+.phone-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  background: var(--surface2);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  transition: border-color var(--dur);
+}
+.dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-xdim);
+  flex-shrink: 0;
+  transition: background var(--dur), box-shadow var(--dur);
+}
+.dot.on  { background: var(--success); box-shadow: 0 0 0 3px var(--success-lo); }
+.dot.rec { background: var(--danger);  animation: dotBlink 0.85s ease-in-out infinite; }
+@keyframes dotBlink { 0%,100%{opacity:1} 50%{opacity:0.15} }
+
+/* ── Buttons ────────────────────────────────────────── */
 .btn {
   display: flex; align-items: center; justify-content: center; gap: 6px;
-  width: 100%; padding: 9px 14px;
-  border: 1px solid var(--border);
+  width: 100%; padding: 8px 14px;
+  border: 1px solid var(--border-hi);
   border-radius: 6px;
   background: var(--surface2);
   color: var(--text);
   font-size: 13px; font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
-  transition: border-color .15s, color .15s, background .15s;
+  transition: border-color var(--dur) var(--ease-out),
+              color var(--dur) var(--ease-out),
+              background var(--dur) var(--ease-out);
   margin-top: 8px;
 }
-.btn:hover { border-color: var(--accent); color: var(--accent); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #0d1117; }
-.btn.primary:hover { background: #79c0ff; }
-.btn.danger { background: rgba(248,81,73,.15); border-color: var(--red); color: var(--red); }
-.btn.danger:hover { background: var(--red); color: white; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-.hint { font-size: 12px; color: var(--dim); margin-top: 6px; line-height: 1.5; }
-.canvas-wrap { position: relative; }
-canvas#spectrum {
-  width: 100%;
-  display: block;
-  border-radius: 4px;
+.btn:hover  { border-color: var(--accent); color: var(--accent); background: var(--accent-lo); }
+.btn:active { background: var(--surface3); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.primary {
+  background: var(--accent); border-color: var(--accent);
+  color: oklch(9% 0.012 252);
+  font-weight: 600;
 }
+.btn.primary:hover  { background: var(--accent-hi); border-color: var(--accent-hi); }
+.btn.primary:active { background: var(--accent); }
+.btn.danger {
+  background: var(--danger-lo); border-color: var(--danger); color: var(--danger);
+}
+.btn.danger:hover  { background: var(--danger); color: oklch(98% 0 0); }
+.btn.danger:active { background: var(--danger); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+
+/* ── Hint / Note ────────────────────────────────────── */
+.hint { font-size: 12px; color: var(--text-dim); margin-top: 6px; line-height: 1.55; }
+.note {
+  font-size: 11px; color: var(--text-dim); margin-top: 10px;
+  padding: 8px 11px; background: var(--surface2);
+  border-radius: 5px; border: 1px solid var(--border);
+  line-height: 1.55;
+}
+.note b { color: var(--warning); font-weight: 600; }
+code {
+  background: var(--surface3); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 5px;
+  font-size: 11px; font-family: 'Courier New', monospace;
+}
+
+/* ── Measurements list ──────────────────────────────── */
+.meas-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 17px; height: 17px; padding: 0 4px;
+  background: var(--surface3); color: var(--text-dim);
+  border: 1px solid var(--border-hi);
+  border-radius: 8px; font-size: 10px; font-weight: 700;
+  vertical-align: middle; margin-left: 6px;
+  transition: background var(--dur), color var(--dur);
+}
+.meas-badge.has-data {
+  background: var(--accent-lo); color: var(--accent); border-color: var(--accent);
+}
+.meas-list { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+.meas-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 5px;
+  font-size: 12.5px;
+  transition: border-color var(--dur);
+}
+.meas-item:hover { border-color: var(--border-hi); }
+.meas-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.meas-name { flex: 1; color: var(--text); }
+.meas-del {
+  background: none; border: none; color: var(--text-xdim);
+  cursor: pointer; font-size: 15px; line-height: 1;
+  padding: 1px 4px; border-radius: 3px;
+  font-family: inherit;
+  transition: color var(--dur), background var(--dur);
+}
+.meas-del:hover  { color: var(--danger); background: var(--danger-lo); }
+.meas-del:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Canvas / Legend ────────────────────────────────── */
+.canvas-wrap {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+canvas#spectrum { width: 100%; display: block; }
 .legend {
-  display: flex; gap: 16px; margin-bottom: 8px;
-  font-size: 11px; color: var(--dim);
-  flex-wrap: wrap;
+  display: flex; gap: 16px; margin-bottom: 9px;
+  font-size: 11px; color: var(--text-dim); flex-wrap: wrap;
 }
 .leg { display: flex; align-items: center; gap: 5px; }
-.leg-line { width: 22px; height: 2px; border-radius: 1px; }
+.leg-line { width: 20px; height: 2px; border-radius: 1px; }
+
+/* ── EQ Table ───────────────────────────────────────── */
 .eq-table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 thead th {
   text-align: left;
-  color: var(--dim);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--text-xdim);
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
-tbody td { padding: 9px 12px; border-bottom: 1px solid #1c2128; }
+tbody td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--dur);
+}
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--surface2); }
-.pos { color: var(--red); font-weight: 600; }
-.neg { color: var(--green); font-weight: 600; }
-.pri-h { color: var(--red); font-weight: 700; }
-.pri-m { color: var(--amber); font-weight: 600; }
-.pri-l { color: var(--dim); }
-.empty { text-align: center; padding: 40px; color: var(--dim); }
+.pos { color: var(--danger); font-weight: 600; }
+.neg { color: var(--success); font-weight: 600; }
+.pri-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 7px; border-radius: 3px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.pri-h { background: var(--danger-lo);  color: var(--danger); }
+.pri-m { background: var(--warning-lo); color: var(--warning); }
+.pri-l { background: var(--surface3);   color: var(--text-dim); }
+.empty {
+  text-align: center; padding: 36px 20px; color: var(--text-xdim);
+  font-size: 13px; line-height: 1.6;
+}
+
+/* ── Analyzing indicator ────────────────────────────── */
 .analyzing {
-  text-align: center; padding: 40px; color: var(--accent);
   display: none;
+  align-items: center; justify-content: center; gap: 10px;
+  padding: 28px; color: var(--accent); font-size: 13px;
 }
-.note {
-  font-size: 11px; color: var(--dim); margin-top: 10px;
-  padding: 8px 10px; background: var(--surface2);
-  border-radius: 4px; border-left: 3px solid var(--border);
-  line-height: 1.5;
+.analyzing.visible { display: flex; }
+.spin {
+  width: 16px; height: 16px;
+  border: 2px solid var(--border-hi);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
 }
-.note b { color: var(--amber); }
-.meas-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 18px; height: 18px; padding: 0 5px;
-  background: var(--accent); color: #0d1117;
-  border-radius: 9px; font-size: 11px; font-weight: 700;
-  vertical-align: middle; margin-left: 4px;
-}
-.meas-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-.meas-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 8px; background: var(--surface2);
-  border: 1px solid var(--border); border-radius: 6px;
-  font-size: 13px;
-}
-.meas-dot {
-  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-}
-.meas-name { flex: 1; color: var(--text); }
-.meas-del {
-  background: none; border: none; color: var(--dim);
-  cursor: pointer; font-size: 16px; line-height: 1;
-  padding: 0 2px; border-radius: 3px;
-  transition: color .15s;
-}
-.meas-del:hover { color: var(--red); }
-.export-row {
-  display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
-}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Export ─────────────────────────────────────────── */
+.export-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .export-btn { flex: 1; min-width: 140px; }
+
+/* ── Q-SYS Modal ────────────────────────────────────── */
 .modal-backdrop {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,.7);
+  background: oklch(0% 0 0 / 0.72);
   display: flex; align-items: center; justify-content: center;
   z-index: 100; padding: 16px;
 }
 .modal {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-hi);
   border-radius: 10px;
-  width: 100%; max-width: 680px;
-  max-height: 90vh;
-  display: flex; flex-direction: column;
-  overflow: hidden;
+  width: 100%; max-width: 680px; max-height: 90vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 24px 64px oklch(0% 0 0 / 0.5);
 }
 .modal-header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 14px 16px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--border);
-  font-weight: 600; font-size: 14px;
+  font-weight: 600; font-size: 13.5px;
 }
 .modal-close {
-  background: none; border: none; color: var(--dim);
-  font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 6px;
-  border-radius: 4px;
+  background: none; border: none; color: var(--text-dim);
+  font-size: 18px; cursor: pointer; line-height: 1;
+  padding: 3px 7px; border-radius: 4px; font-family: inherit;
+  transition: color var(--dur), background var(--dur);
 }
-.modal-close:hover { color: var(--text); background: var(--border); }
+.modal-close:hover { color: var(--text); background: var(--surface3); }
+.modal-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .modal-body { padding: 14px 16px; overflow-y: auto; }
 .script-box {
   width: 100%; height: 340px;
-  background: #0a0d14;
+  background: oklch(7% 0.012 252);
   border: 1px solid var(--border); border-radius: 6px;
-  color: #a8d8a0; font-family: 'Courier New', monospace; font-size: 12px;
-  padding: 12px; resize: vertical; outline: none; line-height: 1.6;
+  color: oklch(74% 0.10 145);
+  font-family: 'Courier New', monospace; font-size: 12px;
+  padding: 12px; resize: vertical; outline: none; line-height: 1.65;
 }
+.script-box:focus { border-color: var(--border-hi); }
 .copy-btn {
   position: absolute; top: 8px; right: 8px;
-  background: var(--surface2); border: 1px solid var(--border);
-  color: var(--text); font-size: 12px; padding: 4px 10px;
-  border-radius: 4px; cursor: pointer;
+  background: var(--surface2); border: 1px solid var(--border-hi);
+  color: var(--text); font-size: 11.5px; font-weight: 500;
+  padding: 4px 10px; border-radius: 4px; cursor: pointer;
+  font-family: inherit;
+  transition: border-color var(--dur), color var(--dur), background var(--dur);
 }
-.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
-.copy-btn.copied { border-color: var(--green); color: var(--green); }
-code {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 3px; padding: 1px 5px; font-size: 11px; font-family: monospace;
-}
+.copy-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-lo); }
+.copy-btn.copied { border-color: var(--success); color: var(--success); background: var(--success-lo); }
+.copy-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1><span>🎛️</span> Room EQ Analyzer</h1>
-  <span class="badge" id="hdr-badge">Waiting for phone</span>
+  <div class="logo">
+    <div class="logo-icon" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+    Room EQ Analyzer
+  </div>
+  <div class="logo-divider"></div>
+  <span class="status-pill" id="hdr-badge">Waiting for phone</span>
 </header>
 
 <main>
   <div class="panel-left">
 
     <div class="card">
-      <h2>Workflow</h2>
+      <div class="card-title">Workflow</div>
       <ol class="steps" id="steps">
         <li class="done" id="s1">App loaded</li>
         <li class="active" id="s2">Scan QR code on your phone</li>
-        <li id="s3">Play pink noise through your speakers/DSP</li>
-        <li id="s4">Stand at listening position &amp; record on phone</li>
-        <li id="s5">View EQ correction results below</li>
+        <li id="s3">Play pink noise through your speakers</li>
+        <li id="s4">Record from each listening position</li>
+        <li id="s5">Review EQ correction below</li>
       </ol>
     </div>
 
     <div class="card">
-      <h2>Phone Connection</h2>
+      <div class="card-title">Phone Connection</div>
       <div class="qr-wrap">
-        <img id="qr-img" alt="Loading QR code…">
+        <img id="qr-img" alt="QR code loading" width="188" height="188">
         <p class="qr-url" id="qr-url">Generating…</p>
       </div>
       <div class="phone-row">
         <div class="dot" id="phone-dot"></div>
-        <span id="phone-txt">Waiting for phone…</span>
+        <span id="phone-txt">Waiting for phone</span>
       </div>
     </div>
 
     <div class="card">
-      <h2>Pink Noise</h2>
-      <p class="hint">Play through your main speakers at a moderate level (75–85 dB). Keep constant while recording.</p>
-      <button class="btn primary" id="noise-btn" onclick="toggleNoise()">▶ Play Pink Noise</button>
+      <div class="card-title">Pink Noise</div>
+      <p class="hint">Play through your main speakers at 75–85 dB SPL. Keep it running while recording.</p>
+      <button class="btn primary" id="noise-btn" onclick="toggleNoise()">Play Pink Noise</button>
       <div id="noise-status" class="hint" style="margin-top:8px"></div>
     </div>
 
     <div class="card">
-      <h2>Measurements <span id="meas-count-badge" class="meas-badge">0</span></h2>
-      <p class="hint">Record from multiple positions — the graph and EQ update after each one.</p>
-      <div id="meas-list" class="meas-list">
-        <p class="hint" style="text-align:center;padding:8px 0">No measurements yet</p>
+      <div class="card-title">
+        Measurements
+        <span id="meas-count-badge" class="meas-badge">0</span>
       </div>
-      <button class="btn" id="clear-btn" onclick="clearMeasurements()" disabled style="margin-top:8px">Clear All</button>
+      <p class="hint">Record from multiple positions. The averaged response updates after each take.</p>
+      <div id="meas-list" class="meas-list">
+        <p class="hint" style="text-align:center;padding:10px 0;color:var(--text-xdim)">No measurements yet</p>
+      </div>
+      <button class="btn" id="clear-btn" onclick="clearMeasurements()" disabled>Clear All</button>
     </div>
 
   </div>
@@ -342,21 +464,27 @@ code {
   <div class="panel-right">
 
     <div class="card">
-      <h2>Frequency Response</h2>
+      <div class="card-title">Frequency Response</div>
       <div class="legend">
-        <div class="leg"><div class="leg-line" style="background:#555e6e"></div> Individual positions</div>
-        <div class="leg"><div class="leg-line" style="background:var(--amber)"></div> Averaged response</div>
-        <div class="leg"><div class="leg-line" style="background:var(--green); border-top: 2px dashed var(--green); height:0"></div> EQ correction needed</div>
+        <div class="leg"><div class="leg-line" style="background:oklch(40% 0.01 252)"></div>Individual positions</div>
+        <div class="leg"><div class="leg-line" style="background:oklch(74% 0.135 65)"></div>Averaged response</div>
+        <div class="leg"><div class="leg-line" style="background:oklch(65% 0.155 145);opacity:.8;border-top:2px dashed oklch(65% 0.155 145);height:0"></div>EQ correction</div>
       </div>
       <div class="canvas-wrap">
         <canvas id="spectrum" height="280"></canvas>
       </div>
-      <p class="note"><b>Note:</b> Phone microphones are less accurate below ~200 Hz and above ~10 kHz. For critical work use a calibrated measurement mic. The EQ suggestions are most reliable in the mid-range.</p>
+      <p class="note"><b>Note:</b> Phone microphones are less accurate below 200 Hz and above 10 kHz (shaded regions). For critical work use a calibrated measurement mic.</p>
     </div>
 
     <div class="card">
-      <h2>Parametric EQ Correction <span id="avg-label" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim);font-size:11px"></span></h2>
-      <div id="analyzing" class="analyzing">⏳ Analyzing recording…</div>
+      <div class="card-title">
+        Parametric EQ Correction
+        <span id="avg-label" style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-dim);font-size:11px;margin-left:2px"></span>
+      </div>
+      <div id="analyzing" class="analyzing" role="status" aria-live="polite">
+        <div class="spin"></div>
+        Analyzing recording…
+      </div>
       <div class="eq-table-wrap">
         <table>
           <thead>
@@ -377,8 +505,8 @@ code {
       </div>
       <div id="eq-summary" style="display:none" class="note"></div>
       <div class="export-row" id="export-row" style="display:none">
-        <button class="btn export-btn" onclick="exportCSV()">📥 Download CSV</button>
-        <button class="btn export-btn" onclick="showQSYSExport()">🎛️ Q-SYS Lua Script</button>
+        <button class="btn export-btn" onclick="exportCSV()">Download CSV</button>
+        <button class="btn export-btn" onclick="showQSYSExport()">Q-SYS Lua Script</button>
       </div>
     </div>
 
@@ -430,9 +558,9 @@ socket.emit('join', { session: sessionId, role: 'desktop' });
 // ─── Phone connection events ──────────────────────────────────────────────
 socket.on('phone:connected', () => {
   document.getElementById('phone-dot').className = 'dot on';
-  document.getElementById('phone-txt').textContent = 'Phone connected ✓';
+  document.getElementById('phone-txt').textContent = 'Phone connected';
   document.getElementById('hdr-badge').textContent = 'Phone connected';
-  document.getElementById('hdr-badge').className = 'badge ok';
+  document.getElementById('hdr-badge').className = 'status-pill ok';
   setStep(3);
 });
 
@@ -440,7 +568,7 @@ socket.on('phone:disconnected', () => {
   document.getElementById('phone-dot').className = 'dot';
   document.getElementById('phone-txt').textContent = 'Phone disconnected';
   document.getElementById('hdr-badge').textContent = 'Phone disconnected';
-  document.getElementById('hdr-badge').className = 'badge warn';
+  document.getElementById('hdr-badge').className = 'status-pill warn';
 });
 
 socket.on('recording:start', () => {
@@ -451,8 +579,8 @@ socket.on('recording:start', () => {
 
 socket.on('recording:done', () => {
   document.getElementById('phone-dot').className = 'dot on';
-  document.getElementById('phone-txt').textContent = 'Recording received ✓';
-  document.getElementById('analyzing').style.display = 'block';
+  document.getElementById('phone-txt').textContent = 'Recording received';
+  document.getElementById('analyzing').classList.add('visible');
 });
 
 // ─── Multi-measurement state ──────────────────────────────────────────────
@@ -487,7 +615,7 @@ socket.on('audio:final', async ({ buffer, mimeType }) => {
     alert('Could not decode audio: ' + err.message);
     console.error(err);
   } finally {
-    document.getElementById('analyzing').style.display = 'none';
+    document.getElementById('analyzing').classList.remove('visible');
   }
 });
 
@@ -511,6 +639,7 @@ function renderMeasurementsList() {
   const avgLabel = document.getElementById('avg-label');
 
   badge.textContent = measurements.length;
+  badge.className = measurements.length ? 'meas-badge has-data' : 'meas-badge';
   clearBtn.disabled = measurements.length === 0;
   avgLabel.textContent = measurements.length > 1
     ? `— averaged from ${measurements.length} positions`
@@ -591,7 +720,7 @@ function toggleNoise() {
   if (noiseOn) {
     noiseNode && noiseNode.stop();
     noiseNode = null; noiseOn = false;
-    document.getElementById('noise-btn').textContent = '▶ Play Pink Noise';
+    document.getElementById('noise-btn').textContent = 'Play Pink Noise';
     document.getElementById('noise-btn').className = 'btn primary';
     document.getElementById('noise-status').textContent = '';
   } else {
@@ -602,9 +731,9 @@ function toggleNoise() {
     noiseNode.connect(audioCtx.destination);
     noiseNode.start();
     noiseOn = true;
-    document.getElementById('noise-btn').textContent = '■ Stop Pink Noise';
+    document.getElementById('noise-btn').textContent = 'Stop Pink Noise';
     document.getElementById('noise-btn').className = 'btn danger';
-    document.getElementById('noise-status').textContent = 'Playing — ensure speakers are active & at good volume';
+    document.getElementById('noise-status').textContent = 'Playing — keep running while recording';
     setStep(3);
   }
 }
@@ -908,13 +1037,13 @@ function renderEQTable(bands) {
     const priCls = b.priority === 'High' ? 'pri-h' : b.priority === 'Medium' ? 'pri-m' : 'pri-l';
     const fStr = b.freq >= 1000 ? (b.freq/1000).toFixed(b.freq % 1000 ? 1 : 0) + ' kHz' : b.freq + ' Hz';
     return `<tr>
-      <td>${i+1}</td>
-      <td>${b.type}</td>
+      <td style="color:var(--text-xdim)">${i+1}</td>
+      <td style="color:var(--text-dim)">${b.type}</td>
       <td><b>${fStr}</b></td>
       <td class="${gainCls}">${gainStr}</td>
-      <td>${b.Q}</td>
-      <td>${b.bw}</td>
-      <td class="${priCls}">${b.priority}</td>
+      <td style="font-variant-numeric:tabular-nums">${b.Q}</td>
+      <td style="color:var(--text-dim)">${b.bw}</td>
+      <td><span class="pri-badge ${priCls}">${b.priority}</span></td>
     </tr>`;
   }).join('');
 
